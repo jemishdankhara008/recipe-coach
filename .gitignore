@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+.env*.local
+.env.local
 
 # vercel
 .vercel
@@ -40,6 +42,20 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*.local
-.env.local
+# Terraform
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfstate.d/
+infra/*.tfstate*
+infra/crash.log
+infra/lambda.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+package/
+
+# Week notes
+week1/
