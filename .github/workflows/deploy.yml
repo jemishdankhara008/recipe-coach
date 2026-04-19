@@ -1,0 +1,68 @@
+name: Deploy Recipe Coach
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::183548422012:role/recipe-coach-github-actions
+          aws-region: us-east-1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Package Lambda
+        run: |
+          pip install -r requirements.txt \
+            --platform manylinux2014_x86_64 \
+            --only-binary=:all: \
+            --python-version 3.12 \
+            --target ./package \
+            --quiet
+          cp *.py ./package/
+          cd package && zip -r ../infra/lambda.zip . && cd ..
+          rm -rf package
+
+      - name: Deploy Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name recipe-coach-dev-api \
+            --zip-file fileb://infra/lambda.zip \
+            --region us-east-1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 sync out/ s3://recipe-coach-dev-frontend-183548422012/ --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id EJ0BQM4DJV8QQ \
+            --paths "/*"
