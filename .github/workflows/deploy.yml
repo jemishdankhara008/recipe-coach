@@ -55,7 +55,9 @@ jobs:
         run: npm ci
 
       - name: Build frontend
-        run: npm run build
+        run: |
+          rm -rf .next
+          npm run build
 
       - name: Deploy frontend to S3
         run: |
