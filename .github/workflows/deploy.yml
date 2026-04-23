@@ -71,3 +71,11 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id EJ0BQM4DJV8QQ \
             --paths "/*"
+      - name: Build frontend
+        run: |
+          rm -rf .next
+          npm run build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          NEXT_PUBLIC_API_URL: https://3bw7f0s4dg.execute-api.us-east-1.amazonaws.com/api

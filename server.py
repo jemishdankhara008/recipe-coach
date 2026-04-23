@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from typing import Optional
-import uuid
 from datetime import datetime
 import boto3
 from botocore.exceptions import ClientError
@@ -102,31 +102,24 @@ Available Time: {record.available_time_minutes} minutes
 Health Goal: {record.health_goal}"""
 
 
-def call_bedrock(messages) -> str:
-    bedrock_messages = []
-    for msg in messages:
-        if msg["role"] in ["user", "assistant"]:
-            bedrock_messages.append({
-                "role": msg["role"],
-                "content": [{"text": msg["content"]}]
-            })
-
+def call_bedrock(record: RecipeRecord) -> str:
+    messages = [{"role": "user", "content": [{"text": user_prompt_for(record)}]}]
     try:
         response = bedrock_client.converse(
             modelId=BEDROCK_MODEL_ID,
             system=[{"text": system_prompt}],
-            messages=bedrock_messages,
+            messages=messages,
             inferenceConfig={"maxTokens": 2000, "temperature": 0.7, "topP": 0.9}
         )
         return response["output"]["message"]["content"][0]["text"]
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "ValidationException":
-            raise Exception("Invalid message format for Bedrock")
+            raise HTTPException(status_code=400, detail="Invalid message format for Bedrock")
         elif error_code == "AccessDeniedException":
-            raise Exception("Access denied to Bedrock model")
+            raise HTTPException(status_code=403, detail="Access denied to Bedrock model")
         else:
-            raise Exception(f"Bedrock error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Bedrock error: {str(e)}")
 
 
 @app.get("/health")
@@ -149,9 +142,7 @@ async def get_recipe(
 
     conversation = load_conversation(session_id) if USE_DYNAMODB else []
 
-    messages = [{"role": "user", "content": user_prompt_for(record)}]
-
-    assistant_response = call_bedrock(messages)
+    assistant_response = call_bedrock(record)
 
     conversation.append({
         "role": "user",
@@ -167,7 +158,14 @@ async def get_recipe(
     if USE_DYNAMODB:
         save_conversation(session_id, conversation)
 
-    return {"response": assistant_response, "session_id": session_id}
+    def event_stream():
+        lines = assistant_response.split("\n")
+        for i, line in enumerate(lines):
+            yield f"data: {line}\n\n"
+            if i < len(lines) - 1:
+                yield "data:  \n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 if __name__ == "__main__":

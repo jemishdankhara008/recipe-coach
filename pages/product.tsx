@@ -34,7 +34,7 @@ function RecipeForm() {
         const controller = new AbortController();
         let buffer = '';
 
-        await fetchEventSource('/api', {
+        await fetchEventSource(process.env.NEXT_PUBLIC_API_URL || '/api', {
             signal: controller.signal,
             method: 'POST',
             headers: {
